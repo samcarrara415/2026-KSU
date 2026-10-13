@@ -4,24 +4,28 @@
 int
 main(int argc, char *argv[])
 {
-  int mask = 0;
-  char *s;
+  int i;
 
+  // Need a mask and a command.
   if (argc < 3 || argv[1][0] == 0) {
     fprintf(2, "usage: trace <mask> <cmd> [args...]\n");
     exit(1);
   }
-  for (s = argv[1]; *s; s++) {
-    if (*s < '0' || *s > '9' || mask > (0x7fffffff - 9) / 10) {
+
+  // The mask must be all digits.
+  for (i = 0; argv[1][i] != 0; i++) {
+    if (argv[1][i] < '0' || argv[1][i] > '9') {
       fprintf(2, "usage: trace <mask> <cmd> [args...]\n");
       exit(1);
     }
-    mask = mask * 10 + (*s - '0');
   }
-  if (trace(mask) < 0) {
+
+  if (trace(atoi(argv[1])) < 0) {
     fprintf(2, "trace: trace failed\n");
     exit(1);
   }
+
+  // exec keeps the trace mask, so the command is traced.
   exec(argv[2], argv + 2);
   fprintf(2, "trace: exec %s failed\n", argv[2]);
   exit(1);

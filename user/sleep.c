@@ -1,34 +1,29 @@
 #include "kernel/types.h"
 #include "user/user.h"
 
-// Parse a non-empty all-digit string; saturates instead of overflowing.
-static int
-parsenum(char *s)
-{
-  int n = 0;
-
-  if (*s == 0)
-    return -1;
-  for (; *s; s++) {
-    if (*s < '0' || *s > '9')
-      return -1;
-    if (n > (0x7fffffff - 9) / 10)
-      n = 0x7fffffff;
-    else
-      n = n * 10 + (*s - '0');
-  }
-  return n;
-}
-
 int
 main(int argc, char *argv[])
 {
-  int ticks;
+  int i;
 
-  if (argc != 2 || (ticks = parsenum(argv[1])) < 0) {
+  // Need exactly one argument.
+  if (argc != 2) {
     fprintf(2, "usage: sleep <ticks>\n");
     exit(1);
   }
-  pause(ticks);
+
+  // Every character must be a digit (this also rejects "-1" and "").
+  if (argv[1][0] == 0) {
+    fprintf(2, "usage: sleep <ticks>\n");
+    exit(1);
+  }
+  for (i = 0; argv[1][i] != 0; i++) {
+    if (argv[1][i] < '0' || argv[1][i] > '9') {
+      fprintf(2, "usage: sleep <ticks>\n");
+      exit(1);
+    }
+  }
+
+  pause(atoi(argv[1]));
   exit(0);
 }

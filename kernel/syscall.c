@@ -152,68 +152,57 @@ static char *syscallnames[] = {
   [SYS_getprocs] = "getprocs",
 };
 
-enum { ARG_INT, ARG_STR, ARG_NONE };
-
+// Does this syscall take a string as its first argument?
 static int
-traceargkind(int num)
+takes_string(int num)
 {
-  switch (num) {
-  case SYS_open:
-  case SYS_exec:
-  case SYS_chdir:
-  case SYS_mkdir:
-  case SYS_unlink:
-  case SYS_link:
-  case SYS_mknod:
-    return ARG_STR;
-  case SYS_fork:
-  case SYS_getpid:
-  case SYS_uptime:
-  case SYS_sync:
-    return ARG_NONE;
-  }
-  return ARG_INT;
+  return num == SYS_open || num == SYS_exec || num == SYS_chdir ||
+         num == SYS_mkdir || num == SYS_unlink || num == SYS_link ||
+         num == SYS_mknod;
+}
+
+// Does this syscall have no arguments worth printing?
+static int
+takes_nothing(int num)
+{
+  return num == SYS_fork || num == SYS_getpid || num == SYS_uptime ||
+         num == SYS_sync;
 }
 
 void
 syscall(void)
 {
   int num;
+  int arg0, ret;
+  char str[MAXPATH];
+  int str_ok = 0;
   struct proc *p = myproc();
 
   num = p->trapframe->a7;
   if (num > 0 && num < NELEM(syscalls) && syscalls[num]) {
-    // Save a0, and read the string argument, before the handler runs: the
-    // handler overwrites a0 with the return value, and a successful exec
-    // replaces the user memory that held the string. The mask is checked
-    // after the call (so trace can trace itself); only trace changes it, so
-    // gathering arguments when the mask is set or num is trace is enough.
-    int kind = traceargkind(num);
-    int pre = (p->tracemask & (1 << num)) || num == SYS_trace;
-    int a0 = (int)p->trapframe->a0;
-    char path[MAXPATH];
-    int pathok = 0;
-
-    if (pre && kind == ARG_STR)
-      pathok = fetchstr(p->trapframe->a0, path, sizeof(path)) >= 0;
+    // Save a0 and the string BEFORE the call: the handler overwrites a0
+    // with the return value, and a successful exec frees the string's memory.
+    // Only trace can turn tracing on, so if the mask is 0 and this isn't
+    // trace, we can skip this work.
+    arg0 = (int)p->trapframe->a0;
+    if ((p->tracemask != 0 || num == SYS_trace) && takes_string(num))
+      str_ok = (fetchstr(p->trapframe->a0, str, sizeof(str)) >= 0);
 
     // Use num to lookup the system call function for num, call it,
     // and store its return value in p->trapframe->a0
     p->trapframe->a0 = syscalls[num]();
+    ret = (int)p->trapframe->a0;
 
+    // The mask is checked AFTER the call, so trace can trace itself.
     if (p->tracemask & (1 << num)) {
-      int ret = (int)p->trapframe->a0;
-      if (kind == ARG_STR) {
-        if (pathok)
-          printk("[%d] %s(\"%s\") -> %d\n", p->pid, syscallnames[num], path,
-                 ret);
-        else
-          printk("[%d] %s(?) -> %d\n", p->pid, syscallnames[num], ret);
-      } else if (kind == ARG_NONE) {
+      if (takes_string(num) && str_ok)
+        printk("[%d] %s(\"%s\") -> %d\n", p->pid, syscallnames[num], str, ret);
+      else if (takes_string(num))
+        printk("[%d] %s(?) -> %d\n", p->pid, syscallnames[num], ret);
+      else if (takes_nothing(num))
         printk("[%d] %s() -> %d\n", p->pid, syscallnames[num], ret);
-      } else {
-        printk("[%d] %s(%d) -> %d\n", p->pid, syscallnames[num], a0, ret);
-      }
+      else
+        printk("[%d] %s(%d) -> %d\n", p->pid, syscallnames[num], arg0, ret);
     }
   } else {
     printk("%d %s: unknown sys call %d\n", p->pid, p->name, num);
