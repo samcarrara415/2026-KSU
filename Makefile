@@ -156,7 +156,6 @@ UPROGS=\
 	$U/_trace\
 	$U/_ps\
 	$U/_sysinfotest\
-	$U/_psstress\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)
