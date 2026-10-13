@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "uproc.h"
 
 struct cpu cpus[NCPU];
 
@@ -167,6 +168,7 @@ freeproc(struct proc *p)
   p->chan = 0;
   p->killed = 0;
   p->xstate = 0;
+  p->tracemask = 0;
   p->state = UNUSED;
 }
 
@@ -286,6 +288,8 @@ kfork(void)
     if (p->ofile[i])
       np->ofile[i] = filedup(p->ofile[i]);
   np->cwd = idup(p->cwd);
+
+  np->tracemask = p->tracemask;
 
   safestrcpy(np->name, p->name, sizeof(p->name));
 
@@ -700,4 +704,54 @@ procdump(void)
     printk("%d %s %s", p->pid, state, p->name);
     printk("\n");
   }
+}
+
+// Count processes whose state is not UNUSED.
+uint64
+nproc_count(void)
+{
+  struct proc *p;
+  uint64 n = 0;
+
+  for (p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock);
+    if (p->state != UNUSED)
+      n++;
+    release(&p->lock);
+  }
+  return n;
+}
+
+// Copy up to max non-UNUSED processes (in table order) to the user array at
+// buf. Returns the number copied, or -1 if max < 0 or a copy fails.
+int
+getprocs(uint64 buf, int max)
+{
+  struct proc *p, *me = myproc();
+  struct uproc u;
+  int n = 0;
+
+  if (max < 0)
+    return -1;
+  for (p = proc; p < &proc[NPROC] && n < max; p++) {
+    acquire(&wait_lock);
+    acquire(&p->lock);
+    if (p->state == UNUSED) {
+      release(&p->lock);
+      release(&wait_lock);
+      continue;
+    }
+    u.pid = p->pid;
+    u.ppid = p->parent ? p->parent->pid : 0;
+    u.state = p->state;
+    u.sz = p->sz;
+    safestrcpy(u.name, p->name, sizeof(u.name));
+    release(&p->lock);
+    release(&wait_lock);
+    if (copyout(me->pagetable, me->sz, buf + n * sizeof(u), (char *)&u,
+                sizeof(u)) < 0)
+      return -1;
+    n++;
+  }
+  return n;
 }

@@ -30,6 +30,7 @@ int             kexec(char*, char**);
 struct file*    filealloc(void);
 void            fileclose(struct file*);
 struct file*    filedup(struct file*);
+uint64          nopenfile(void);
 void            fileinit(void);
 int             fileread(struct file*, uint64, int n);
 int             filestat(struct file*, uint64 addr);
@@ -58,6 +59,7 @@ void            ireclaim(int);
 
 // kalloc.c
 void*           kalloc(void);
+uint64          kfreemem(void);
 void            kfree(void *);
 void            kinit(void);
 
@@ -82,6 +84,8 @@ void            printkinit(void);
 int             cpuid(void);
 void            kexit(int);
 int             kfork(void);
+uint64          nproc_count(void);
+int             getprocs(uint64, int);
 int             growproc(int);
 void            proc_mapstacks(pagetable_t);
 pagetable_t     proc_pagetable(struct proc *);
